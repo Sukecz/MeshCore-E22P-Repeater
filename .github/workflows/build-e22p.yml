@@ -20,8 +20,8 @@ jobs:
       - name: Set up PlatformIO
         uses: ./.github/actions/setup-build-environment
 
-      - name: Test configuration persistence
-        run: pio test -e native -f test_config_serializer
+      - name: Test configuration and health diagnostics
+        run: pio test -e native
 
       - name: Build application and merged images
         run: |

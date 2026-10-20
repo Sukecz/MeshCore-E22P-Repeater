@@ -42,6 +42,22 @@ periodic resets enabled, set `agc.reset.interval` to `0` after upgrading:
 set agc.reset.interval 0
 ```
 
+### Health interpretation
+
+`health` is an advisory summary, not a hardware fault detector. Since
+`1.18.0-e22p.2`, `rxerr` is failed reads divided by all read attempts
+(successful + failed), using counters since boot or `clear stats`.
+
+- RX errors below 30% alone do not change `good` to a warning.
+- RX errors at or above 30% produce `warn`, never `bad` by themselves.
+- At least 50% flood duplicates or 8 queued outbound packets produce `warn`.
+- Disabled forwarding or at least 16 queued outbound packets produce `bad`.
+
+These are local diagnostic thresholds, not universal acceptable packet-loss
+limits. Check actual delivery, `radio diag` and queue drainage when investigating
+problems. `good` does not prove every link is reliable. Noise floor is displayed
+for reference and never affects this rating.
+
 ## Hardware
 
 The E22P requires a stable external supply. For full output, use approximately

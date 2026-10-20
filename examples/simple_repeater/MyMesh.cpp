@@ -1,5 +1,6 @@
 #include "MyMesh.h"
 #include <algorithm>
+#include <helpers/RepeaterHealth.h>
 #ifdef WIFI_NTP_WATCHDOG
 #include <WiFi.h>
 #include <WiFiUdp.h>
@@ -1487,17 +1488,12 @@ void MyMesh::formatDiagReply(char *reply) {
 void MyMesh::formatHealthReply(char *reply) {
   uint32_t total_rx = radio_driver.getPacketsRecv();
   uint32_t rx_errors = radio_driver.getPacketsRecvErrors();
-  uint8_t err_pct = total_rx == 0 ? 0 : (uint8_t)((rx_errors * 100UL) / total_rx);
+  uint8_t err_pct = RepeaterHealth::receiveErrorPercent(total_rx, rx_errors);
   auto tables = (SimpleMeshTables *)getTables();
   uint32_t flood_dups = tables->getNumFloodDups();
   uint8_t dup_pct = getNumRecvFlood() == 0 ? 0 : (uint8_t)((flood_dups * 100UL) / getNumRecvFlood());
-  const char* state = "good";
-
-  if (_prefs.disable_fwd || err_pct >= 10 || _mgr->getOutboundTotal() >= 16) {
-    state = "bad";
-  } else if (err_pct >= 3 || dup_pct >= 50 || _mgr->getOutboundTotal() >= 8) {
-    state = "warn";
-  }
+  const char* state = RepeaterHealth::state(_prefs.disable_fwd,
+                                          _mgr->getOutboundTotal(), err_pct, dup_pct);
 
   snprintf(reply, 160,
            "health=%s rxerr=%u%% dup=%u%% q=%u snr=%.2f rssi=%d nf=%d air=%lus/%lus",
