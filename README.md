@@ -58,6 +58,19 @@ limits. Check actual delivery, `radio diag` and queue drainage when investigatin
 problems. `good` does not prove every link is reliable. Noise floor is displayed
 for reference and never affects this rating.
 
+### Clock synchronization
+
+Since `1.18.0-e22p.3`, pending NTP replies are processed on each normal mesh
+loop as soon as available. The 2.5-second limit is only a timeout; earlier
+releases unnecessarily waited for it before applying a received timestamp.
+This avoids adding that delay to the clock offset.
+
+Optional Wi-Fi NTP complements the upstream RTC backup across warm resets:
+there is one shared clock, with no second synchronization client. The first
+check remains 180 seconds after boot, then every six hours, with ten-minute
+retries on failure. Corrections only move time forward to preserve MeshCore
+timestamps and replay protection. `wifi off` disables NTP.
+
 ## Hardware
 
 The E22P requires a stable external supply. For full output, use approximately

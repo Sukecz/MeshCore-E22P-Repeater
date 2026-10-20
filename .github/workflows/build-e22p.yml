@@ -20,6 +20,9 @@ jobs:
       - name: Set up PlatformIO
         uses: ./.github/actions/setup-build-environment
 
+      - name: Test NTP reply scheduling
+        run: python3 test/test_ntp_watchdog.py
+
       - name: Test configuration and health diagnostics
         run: pio test -e native
 

@@ -1607,9 +1607,8 @@ void MyMesh::finishTimeWatchdogSync(bool ok, uint32_t ntp_time) {
 }
 
 void MyMesh::runTimeWatchdog() {
-  if (!time_watchdog_at || !millisHasNowPassed(time_watchdog_at)) return;
-
   if (!time_watchdog_pending) {
+    if (!time_watchdog_at || !millisHasNowPassed(time_watchdog_at)) return;
     startTimeWatchdogSync();
     return;
   }
@@ -1628,9 +1627,9 @@ void MyMesh::runTimeWatchdog() {
     time_watchdog_state = TIME_WD_TIMEOUT;
     time_watchdog_fails++;
     time_watchdog_at = futureMillis(WIFI_NTP_WATCHDOG_RETRY_MS);
-  } else {
-    time_watchdog_at = futureMillis(250);
   }
+  // While pending, check UDP on each normal mesh loop; the 2.5 s limit is
+  // only a timeout, not a delay before processing an already-arrived reply.
 }
 #endif
 

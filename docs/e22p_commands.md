@@ -53,6 +53,11 @@ admin password so LAN OTA remains reachable after upgrading.
 | `time watchdog` | Show optional Wi-Fi NTP watchdog status. |
 | `time sync` | Start an immediate NTP attempt when STA is connected. |
 
+NTP replies are processed as soon as available since `1.18.0-e22p.3`;
+the 2.5-second limit is a timeout only. Automatic checks retain the 180-second
+boot delay, six-hour interval and ten-minute failure retry. NTP advances the
+same clock that upstream preserves across warm resets and never sets it back.
+
 Use `help` or `help 1` through `help 6` for compact on-device command pages.
 
 ### Health interpretation
