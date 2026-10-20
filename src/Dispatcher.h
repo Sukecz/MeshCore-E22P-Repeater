@@ -65,6 +65,8 @@ public:
 
   virtual void triggerNoiseFloorCalibrate(int threshold) { }
 
+  virtual void setCADEnabled(bool enable) { }
+
   virtual void resetAGC() { }
 
   virtual bool isInRecvMode() const = 0;
@@ -95,6 +97,7 @@ public:
   virtual uint32_t getOutboundDropCount() const { return 0; }
   virtual uint32_t getInboundDropCount() const { return 0; }
   virtual uint32_t getAllocFailCount() const { return 0; }
+  virtual uint32_t getOldestReadyOutboundAge(uint32_t now) const { return 0; }
   virtual Packet* getOutboundByIdx(int i) = 0;
   virtual Packet* removeOutboundByIdx(int i) = 0;
   virtual void queueInbound(Packet* packet, uint32_t scheduled_for) = 0;
@@ -111,6 +114,15 @@ typedef uint32_t  DispatcherAction;
 #define ERR_EVENT_FULL              (1 << 0)
 #define ERR_EVENT_CAD_TIMEOUT       (1 << 1)
 #define ERR_EVENT_STARTRX_TIMEOUT   (1 << 2)
+
+enum TxSchedulerGate : uint8_t {
+  TX_GATE_IDLE = 0,
+  TX_GATE_ACTIVE,
+  TX_GATE_BUDGET,
+  TX_GATE_TIME,
+  TX_GATE_CAD,
+  TX_GATE_START_FAILED,
+};
 
 /**
  * \brief  The low-level task that manages detecting incoming Packets, and the queueing
@@ -129,6 +141,8 @@ class Dispatcher {
   unsigned long tx_budget_ms;
   unsigned long last_budget_update;
   unsigned long duty_cycle_window_ms;
+  TxSchedulerGate tx_scheduler_gate;
+  uint32_t tx_timeout_count;
 
   void processRecvPacket(Packet* pkt);
   void updateTxBudget();
@@ -153,6 +167,8 @@ protected:
     tx_budget_ms = 0;
     last_budget_update = 0;
     duty_cycle_window_ms = 3600000;
+    tx_scheduler_gate = TX_GATE_IDLE;
+    tx_timeout_count = 0;
   }
 
   virtual DispatcherAction onRecvPacket(Packet* pkt) = 0;
@@ -169,6 +185,7 @@ protected:
   virtual uint32_t getCADFailRetryDelay() const;
   virtual uint32_t getCADFailMaxDuration() const;
   virtual int getInterferenceThreshold() const { return 0; }    // disabled by default
+  virtual bool getCADEnabled() const { return false; }    // hardware CAD disabled by default
   virtual int getAGCResetInterval() const { return 0; }    // disabled by default
   virtual unsigned long getDutyCycleWindowMs() const { return 3600000; }
 
@@ -183,6 +200,15 @@ public:
   unsigned long getTotalAirTime() const { return total_air_time; }
   unsigned long getReceiveAirTime() const {return rx_air_time; }
   unsigned long getRemainingTxBudget() const { return tx_budget_ms; }
+  unsigned long getMaxTxBudget() const;
+  unsigned long getTxBudgetUpdateAge() const { return _ms->getMillis() - last_budget_update; }
+  int32_t getNextTxDelay() const { return (int32_t)(next_tx_time - _ms->getMillis()); }
+  unsigned long getCadBusyAge() const { return cad_busy_start ? _ms->getMillis() - cad_busy_start : 0; }
+  unsigned long getActiveTxAge() const { return outbound ? _ms->getMillis() - outbound_start : 0; }
+  bool hasActiveOutbound() const { return outbound != NULL; }
+  TxSchedulerGate getTxSchedulerGate() const { return tx_scheduler_gate; }
+  const char* getTxSchedulerGateName() const;
+  uint32_t getTxTimeoutCount() const { return tx_timeout_count; }
   uint32_t getNumSentFlood() const { return n_sent_flood; }
   uint32_t getNumSentDirect() const { return n_sent_direct; }
   uint32_t getNumRecvFlood() const { return n_recv_flood; }

@@ -5,33 +5,42 @@ MeshCore repeater firmware for the **Seeed Studio XIAO ESP32S3** and the
 module.
 
 This is a standalone, single-target firmware project based on MeshCore repeater
-v1.16.0. It supports only the XIAO ESP32S3 + E22P-868M30S combination and adds
-radio diagnostics, optional home Wi-Fi and field-tested E22P noise-floor
-recovery.
+v1.18.0. It supports only the XIAO ESP32S3 + E22P-868M30S combination and adds
+radio diagnostics, optional home Wi-Fi and protected LAN OTA.
 
 ## Highlights
 
 - Dedicated `Xiao_S3_E22P_repeater` PlatformIO environment.
 - Full E22P output using SX1262 power `22 dBm` and the module's RF front end.
 - DIO2 RF switch control, 1.8 V DIO3 TCXO and E22P EN control.
-- Default `agc.reset.interval=4` recovery for the E22P receive path.
-- Fresh 64-sample noise-floor measurement after each successful AGC reset.
-- `health`, `diag`, `queue`, `dense`, `cli stats` and `tx diag` commands.
+- Periodic AGC reset disabled by default (`agc.reset.interval=0`) for reliable RX.
+- Upstream noise-floor sampling; with `int.thresh=0` it does not gate TX.
+- `health`, `diag`, `queue`, `tx sched`, `radio diag`, `dense`, `cli stats` and `tx diag` commands.
 - Original temporary `MeshCore-OTA` access point through `start ota`.
 - Optional persistent home Wi-Fi through WiFiManager and `wifi on`.
 - Password-protected LAN OTA, diagnostics and HTTP CLI.
 
-### Field-tested noise floor
+### Receive stability
 
-The E22P receiver can occasionally retain an unrealistically high noise floor.
-This build performs a short warm-sleep AGC reset every 4 seconds when no packet
-is being received, then calculates a new average from 64 RSSI samples. Generic
-periodic calibration updates the threshold without replacing this post-reset
-measurement.
+Periodic four-second AGC resets caused dropped packets and command timeouts in
+field testing. This release disables them by default and retains upstream
+noise-floor sampling. With the default `int.thresh=0`, noise-floor telemetry
+does not gate transmission. The noise-floor value reported with this radio
+module is inaccurate and must not be treated as a reliable measurement of the
+RF environment. Use `radio diag`, `queue` and `tx sched` to check
+RX/TX completion, queue drainage and radio start failures.
 
-Repeated field readings after the fix remained around `-111` to `-112 dBm`
-instead of returning to the stale state near `-96 dBm`. Actual values depend on
-the antenna and local RF environment. Check the current value with `health`.
+The upstream FAQ suggests a four-second reset as a generic SX1262 deafness
+workaround. That advice predates v1.18.0; the new release fixes interval
+validation, while upstream still defaults to zero. For this E22P build, field
+tests support keeping periodic resets disabled.
+
+Upgrading preserves the saved configuration. If you used an older release with
+periodic resets enabled, set `agc.reset.interval` to `0` after upgrading:
+
+```text
+set agc.reset.interval 0
+```
 
 ## Hardware
 
@@ -135,13 +144,13 @@ See [docs/e22p_commands.md](docs/e22p_commands.md) for the command reference.
 
 ## Radio defaults
 
-- Frequency: 869.525 MHz
-- Bandwidth: 250 kHz
-- Spreading factor: 10
+- Frequency: 869.618 MHz
+- Bandwidth: 62.5 kHz
+- Spreading factor: 8
 - Coding rate: 5
 - SX1262 TX power: 22 dBm
 - SX1262 current limit: 140 mA
-- E22P AGC reset interval: 4 seconds
+- E22P AGC reset interval: 0 seconds (disabled)
 
 The 140 mA value is the SX1262 current limit, not the total E22P module supply
 current. Verify that your frequency, antenna, output power and duty cycle comply
@@ -149,6 +158,6 @@ with local regulations.
 
 ## Credits and license
 
-Based on [MeshCore](https://github.com/meshcore-dev/MeshCore) repeater v1.16.0.
+Based on [MeshCore](https://github.com/meshcore-dev/MeshCore) repeater v1.18.0.
 The source remains available under the MIT license in [license.txt](license.txt).
 This project is not an official Ebyte or MeshCore product.

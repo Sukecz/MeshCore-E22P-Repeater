@@ -14,7 +14,11 @@ public:
   bool add(mesh::Packet* packet, uint8_t priority, uint32_t scheduled_for);
   int count() const { return _num; }
   int countBefore(uint32_t now) const;
-  mesh::Packet* itemAt(int i) const { return _table[i]; }
+  uint32_t oldestReadyAge(uint32_t now) const;
+  mesh::Packet* itemAt(int i) const {
+    if (i < 0 || i >= _num) return NULL;
+    return _table[i];
+  }
   mesh::Packet* removeByIdx(int i);
 };
 
@@ -37,6 +41,7 @@ public:
   uint32_t getOutboundDropCount() const override;
   uint32_t getInboundDropCount() const override;
   uint32_t getAllocFailCount() const override;
+  uint32_t getOldestReadyOutboundAge(uint32_t now) const override;
   mesh::Packet* getOutboundByIdx(int i) override;
   mesh::Packet* removeOutboundByIdx(int i) override;
   void queueInbound(mesh::Packet* packet, uint32_t scheduled_for) override;

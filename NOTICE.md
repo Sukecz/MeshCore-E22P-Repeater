@@ -1,7 +1,7 @@
 # Upstream notice
 
-This repository contains source derived from MeshCore repeater v1.16.0
-(`07a3ca9e05b0ab23b878200b2c44b04e08131972`).
+This repository contains source derived from MeshCore repeater v1.18.0
+(`d95fd9199b19af185ee62a55f08d73bb20958931`).
 
 Upstream project: https://github.com/meshcore-dev/MeshCore
 

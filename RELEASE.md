@@ -1,6 +1,6 @@
 # Releasing firmware
 
-Create a tag such as `e22p-v1.16.0-1`. GitHub Actions builds and attaches:
+Create a tag such as `e22p-v1.18.0-1`. GitHub Actions builds and attaches:
 
 - `firmware.bin` for OTA updates;
 - `firmware-merged.bin` for first installation at offset `0x0`.

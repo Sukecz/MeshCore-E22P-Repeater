@@ -20,6 +20,8 @@ void Dispatcher::begin() {
   n_sent_flood = n_sent_direct = 0;
   n_recv_flood = n_recv_direct = 0;
   _err_flags = 0;
+  tx_scheduler_gate = TX_GATE_IDLE;
+  tx_timeout_count = 0;
   radio_nonrx_start = _ms->getMillis();
 
   duty_cycle_window_ms = getDutyCycleWindowMs();
@@ -29,6 +31,22 @@ void Dispatcher::begin() {
 
   _radio->begin();
   prev_isrecv_mode = _radio->isInRecvMode();
+}
+
+unsigned long Dispatcher::getMaxTxBudget() const {
+  float duty_cycle = 1.0f / (1.0f + getAirtimeBudgetFactor());
+  return (unsigned long)(getDutyCycleWindowMs() * duty_cycle);
+}
+
+const char* Dispatcher::getTxSchedulerGateName() const {
+  switch (tx_scheduler_gate) {
+    case TX_GATE_ACTIVE: return "active";
+    case TX_GATE_BUDGET: return "budget";
+    case TX_GATE_TIME: return "time";
+    case TX_GATE_CAD: return "cad";
+    case TX_GATE_START_FAILED: return "start-fail";
+    default: return "idle";
+  }
 }
 
 float Dispatcher::getAirtimeBudgetFactor() const {
@@ -66,6 +84,7 @@ uint32_t Dispatcher::getCADFailMaxDuration() const {
 void Dispatcher::loop() {
   if (millisHasNowPassed(next_floor_calib_time)) {
     _radio->triggerNoiseFloorCalibrate(getInterferenceThreshold());
+    _radio->setCADEnabled(getCADEnabled());
     next_floor_calib_time = futureMillis(NOISE_FLOOR_CALIB_INTERVAL);
   }
   _radio->loop();
@@ -83,6 +102,7 @@ void Dispatcher::loop() {
   }
 
   if (outbound) {  // waiting for outbound send to be completed
+    tx_scheduler_gate = TX_GATE_ACTIVE;
     if (_radio->isSendComplete()) {
       long t = _ms->getMillis() - outbound_start;
       total_air_time += t;
@@ -117,6 +137,7 @@ void Dispatcher::loop() {
       MESH_DEBUG_PRINTLN("%s Dispatcher::loop(): WARNING: outbound packed send timed out!", getLogDateTime());
 
       _radio->onSendFinished();
+      tx_timeout_count++;
       logTxFail(outbound, 2 + outbound->getPathByteLen() + outbound->payload_len);
 
       releasePacket(outbound);  // return to pool
@@ -272,19 +293,26 @@ void Dispatcher::processRecvPacket(Packet* pkt) {
 }
 
 void Dispatcher::checkSend() {
-  if (_mgr->getOutboundCount(_ms->getMillis()) == 0) return;
+  if (_mgr->getOutboundCount(_ms->getMillis()) == 0) {
+    tx_scheduler_gate = TX_GATE_IDLE;
+    return;
+  }
   
   updateTxBudget();
   
   uint32_t est_airtime = _radio->getEstAirtimeFor(MAX_TRANS_UNIT);
   if (tx_budget_ms < est_airtime / MIN_TX_BUDGET_AIRTIME_DIV) {
+    tx_scheduler_gate = TX_GATE_BUDGET;
     float duty_cycle = 1.0f / (1.0f + getAirtimeBudgetFactor());
     unsigned long needed = est_airtime / MIN_TX_BUDGET_AIRTIME_DIV - tx_budget_ms;
     next_tx_time = futureMillis((unsigned long)(needed / duty_cycle));
     return;
   }
   
-  if (!millisHasNowPassed(next_tx_time)) return;
+  if (!millisHasNowPassed(next_tx_time)) {
+    tx_scheduler_gate = TX_GATE_TIME;
+    return;
+  }
   if (_radio->isReceiving()) {
     if (cad_busy_start == 0) {
       cad_busy_start = _ms->getMillis();   // record when CAD busy state started
@@ -297,6 +325,7 @@ void Dispatcher::checkSend() {
       // channel activity has gone on too long... (Radio might be in a bad state)
       // force the pending transmit below...
     } else {
+      tx_scheduler_gate = TX_GATE_CAD;
       next_tx_time = futureMillis(getCADFailRetryDelay());
       return;
     }
@@ -305,6 +334,7 @@ void Dispatcher::checkSend() {
 
   outbound = _mgr->getNextOutbound(_ms->getMillis());
   if (outbound) {
+    tx_scheduler_gate = TX_GATE_ACTIVE;
     int len = 0;
     uint8_t raw[MAX_TRANS_UNIT];
 
@@ -327,6 +357,7 @@ void Dispatcher::checkSend() {
       outbound_start = _ms->getMillis();
       bool success = _radio->startSendRaw(raw, len);
       if (!success) {
+        tx_scheduler_gate = TX_GATE_START_FAILED;
         MESH_DEBUG_PRINTLN("%s Dispatcher::loop(): ERROR: send start failed!", getLogDateTime());
 
         logTxFail(outbound, outbound->getRawLength());

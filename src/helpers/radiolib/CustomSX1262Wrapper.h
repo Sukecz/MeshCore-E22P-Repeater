@@ -18,6 +18,9 @@ public:
     ((CustomSX1262 *)_radio)->setBandwidth(bw);
     ((CustomSX1262 *)_radio)->setCodingRate(cr);
     updatePreamble(sf);
+    PacketMillis pm = calcMaxPacketMillis(sf, bw, cr, preambleLengthForSF(sf));
+    ((CustomSX1262 *)_radio)->setPreambleMillis(pm.preambleMillis);
+    ((CustomSX1262 *)_radio)->setMaxPayloadMillis(pm.payloadMillis);
   }
 
   bool isReceivingPacket() override { 
@@ -38,20 +41,30 @@ public:
     ((CustomSX1262 *)_radio)->sleep(false);
   }
 
-  void doResetAGC() override {
-#ifdef SX126X_AGC_RESET_SIMPLE_SLEEP
-    // Some SX1262 FEM modules recover noise floor more reliably with the older
-    // warm-sleep-only reset than with full Calibrate(0x7F).
-    ((CustomSX1262 *)_radio)->sleep();
-#else
-    sx126xResetAGC((SX126x *)_radio);
-#endif
-  }
+  void doResetAGC() override { sx126xResetAGC((SX126x *)_radio, getRxBoostedGainMode()); }
 
-  void setRxBoostedGainMode(bool en) override {
-    ((CustomSX1262 *)_radio)->setRxBoostedGainMode(en);
+  bool setRxBoostedGainMode(bool en) override {
+    return ((CustomSX1262 *)_radio)->setRxBoostedGainMode(en) == RADIOLIB_ERR_NONE;
   }
   bool getRxBoostedGainMode() const override {
     return ((CustomSX1262 *)_radio)->getRxBoostedGainMode();
+  }
+
+  int32_t getIRQFlagsDiagnostic() override {
+    return ((CustomSX1262 *)_radio)->getIrqFlags();
+  }
+  int getDio1Diagnostic() const override {
+#if defined(P_LORA_DIO_1) && P_LORA_DIO_1 != RADIOLIB_NC
+    return digitalRead(P_LORA_DIO_1);
+#else
+    return -1;
+#endif
+  }
+  int getBusyDiagnostic() const override {
+#if defined(P_LORA_BUSY) && P_LORA_BUSY != RADIOLIB_NC
+    return digitalRead(P_LORA_BUSY);
+#else
+    return -1;
+#endif
   }
 };

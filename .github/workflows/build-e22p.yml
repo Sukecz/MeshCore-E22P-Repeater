@@ -20,6 +20,9 @@ jobs:
       - name: Set up PlatformIO
         uses: ./.github/actions/setup-build-environment
 
+      - name: Test configuration persistence
+        run: pio test -e native -f test_config_serializer
+
       - name: Build application and merged images
         run: |
           pio run -e Xiao_S3_E22P_repeater

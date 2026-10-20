@@ -5,7 +5,12 @@
 
 #ifdef DISPLAY_CLASS
   #include "UITask.h"
-  static UITask ui_task(display);
+  static UITask ui_task(board, display);
+#endif
+
+#ifdef ETHERNET_ENABLED
+  #define ETHERNET_CLI_BANNER "MeshCore Repeater CLI"
+  #include <helpers/nrf52/EthernetCLI.h>
 #endif
 
 StdRNG fast_rng;
@@ -23,6 +28,9 @@ void halt() {
 }
 
 static char command[160];
+#ifdef ETHERNET_ENABLED
+static char ethernet_command[160];
+#endif
 
 static void handleWifiCommand(char* cmd, char* reply) {
   the_mesh.handleCommand(0, cmd, reply);
@@ -50,6 +58,10 @@ void setup() {
   } else {
     board.setBootStatus("wifi_sta_disabled");
   }
+#endif
+
+#ifdef HAS_EXTERNAL_WATCHDOG
+  external_watchdog.begin();
 #endif
 
 #if defined(MESH_DEBUG) && defined(NRF52_PLATFORM)
@@ -108,6 +120,9 @@ void setup() {
   mesh::Utils::printHex(Serial, the_mesh.self_id.pub_key, PUB_KEY_SIZE); Serial.println();
 
   command[0] = 0;
+#ifdef ETHERNET_ENABLED
+  ethernet_command[0] = 0;
+#endif
 
   sensors.begin();
 
@@ -123,6 +138,10 @@ void setup() {
   ui_task.begin(the_mesh.getNodePrefs(), FIRMWARE_BUILD_DATE, FIRMWARE_VERSION);
 #endif
 
+#ifdef ETHERNET_ENABLED
+  ethernet_start_task();
+#endif
+
   // send out initial zero hop Advertisement to the mesh
 #if ENABLE_ADVERT_ON_BOOT == 1
   the_mesh.sendSelfAdvertisement(16000, false);
@@ -132,7 +151,15 @@ void setup() {
 }
 
 void loop() {
+  // Handle Serial CLI
   int len = strlen(command);
+  // `command` must stay NUL-terminated within its bounds. If it ever isn't,
+  // strlen() above can return >= sizeof(command) and the loop below would then
+  // index past the buffer, so clamp defensively.
+  if (len >= (int)sizeof(command)) {
+    command[0] = 0;
+    len = 0;
+  }
   while (Serial.available() && len < sizeof(command)-1) {
     char c = Serial.read();
     if (c != '\n') {
@@ -142,15 +169,23 @@ void loop() {
     }
     if (c == '\r') break;
   }
-  if (len == sizeof(command)-1) {  // command buffer full
-    command[sizeof(command)-1] = '\r';
+  if (len == sizeof(command)-1) {  // buffer full: treat as a completed line
+    command[sizeof(command)-2] = '\r';  // place end-of-line marker inside the buffer
+    command[sizeof(command)-1] = 0;     // keep the buffer NUL-terminated
   }
 
   if (len > 0 && command[len - 1] == '\r') {  // received complete line
     Serial.print('\n');
     command[len - 1] = 0;  // replace newline with C string null terminator
     char reply[160];
+    reply[0] = 0;
+#ifdef ETHERNET_ENABLED
+    if (!ethernet_handle_command(command, reply)) {
+      the_mesh.handleCommand(0, command, reply);
+    }
+#else
     the_mesh.handleCommand(0, command, reply);  // NOTE: there is no sender_timestamp via serial!
+#endif
     if (reply[0]) {
       Serial.print("  -> "); Serial.println(reply);
     }
@@ -158,7 +193,22 @@ void loop() {
     command[0] = 0;  // reset command buffer
   }
 
-#if defined(PIN_USER_BTN) && defined(_SEEED_SENSECAP_SOLAR_H_)
+  board.loop();   // let the board feed its watchdog, run periodic housekeeping
+
+#ifdef ETHERNET_ENABLED
+  ethernet_loop_maintain();
+  if (ethernet_read_line(ethernet_command, sizeof(ethernet_command))) {
+    char reply[160];
+    reply[0] = 0;
+    if (!ethernet_handle_command(ethernet_command, reply)) {
+      the_mesh.handleCommand(0, ethernet_command, reply);
+    }
+    ethernet_send_reply(reply);
+    ethernet_command[0] = 0;
+  }
+#endif
+
+#if defined(PIN_USER_BTN) && defined(_SEEED_SENSECAP_SOLAR_H_) && !defined(DISPLAY_CLASS)
   // Hold the user button to power off the SenseCAP Solar repeater.
   int btnState = digitalRead(PIN_USER_BTN);
   if (btnState == LOW) {
@@ -183,6 +233,9 @@ void loop() {
 #endif
   rtc_clock.tick();
 
+#ifdef HAS_EXTERNAL_WATCHDOG
+  external_watchdog.loop();
+#endif
   if (the_mesh.getNodePrefs()->powersaving_enabled && !the_mesh.hasPendingWork()) {
 #if defined(NRF52_PLATFORM)
     board.sleep(0); // nrf ignores seconds param, sleeps whenever possible

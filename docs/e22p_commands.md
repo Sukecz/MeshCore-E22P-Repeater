@@ -34,8 +34,8 @@ admin password so LAN OTA remains reachable after upgrading.
 | `get tx` | Show SX1262 TX power. |
 | `set tx <dbm>` | Set TX power from -9 to 22 dBm. |
 | `tx diag` / `get tx.diag` | Show stored, requested and applied TX power and RadioLib status. |
-| `get agc.reset.interval` | Show the E22P AGC recovery interval. Default: 4 seconds. |
-| `set agc.reset.interval <seconds>` | Set the interval; `0` disables periodic AGC recovery. |
+| `get agc.reset.interval` | Show the E22P AGC recovery interval. Default: 0 seconds (disabled). |
+| `set agc.reset.interval <seconds>` | Keep `0` for reliable reception; four-second resets caused RX loss. |
 
 ## Diagnostics
 
@@ -44,6 +44,8 @@ admin password so LAN OTA remains reachable after upgrading.
 | `health` | Health, RX errors, duplicates, queue, SNR, RSSI, noise floor and airtime. |
 | `diag` | Uptime, reset reason, heap, queue, errors and OTA/Wi-Fi state. |
 | `queue` | Packet queue, drop and allocation counters. |
+| `tx sched` | TX gate, airtime budget, next TX delay, ready-packet age and timeout count. |
+| `radio diag` | IRQ/pin state, RX/TX start status, attempt/failure counters and TX completion count. |
 | `dense` | Flood, advert, forwarding, drop and duplicate counters. |
 | `cli stats` | Remote CLI receive, rejection and reply-path counters. |
 | `clear dense` | Reset dense-mesh counters. |
